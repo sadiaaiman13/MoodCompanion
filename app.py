@@ -2,42 +2,48 @@ import streamlit as st
 import pandas as pd
 import random
 import datetime
+import sys
+
+# --- Try to import optional libraries safely ---
+try:
+    from transformers import pipeline
+    generator = pipeline("text-generation", model="distilgpt2")
+except Exception:
+    generator = None
+
+try:
+    import cv2
+    cv2_available = True
+except ImportError:
+    cv2_available = False
+
 try:
     import speech_recognition as sr
     voice_available = True
 except ImportError:
     voice_available = False
 
-from transformers import pipeline
-import cv2
 
+# --- Streamlit Page Setup ---
+st.set_page_config(page_title="🌤️ Mood Companion", page_icon="🌤️")
+st.title("🌤️ Mood Companion (AI + Tracker)")
+st.write("Track your mood, get kind AI messages, and see your progress 💛")
 
-# --- AI text generator ---
-generator = pipeline("text-generation", model="distilgpt2")
-
-st.set_page_config(page_title="Mood Companion", page_icon="🌤️")
-
-st.title("🌤️ Mood Companion (Edge AI + Voice + Tracker)")
-st.write("Speak, smile, or share your mood — I’ll listen and respond gently 💛")
-
-# --- Mood input section ---
-st.write("🎙️ You can type or say your mood aloud")
-
+# --- Mood Input ---
+st.write("🎙️ You can type your mood or choose one below:")
 mood = st.selectbox(
-    "Or choose your current mood:",
+    "Select your current mood:",
     ["😐 Neutral", "😞 Sad", "😡 Angry", "😰 Stressed", "😊 Happy", "😴 Tired"]
 )
 
-# --- Voice input ---
-st.write("🎙️ You can type your mood — or use your voice if available")
-
-if voice_available:
+# --- Voice Input (Local Only) ---
+if voice_available and not st.secrets.get("on_cloud", False):
     if st.button("🎧 Record my voice"):
         r = sr.Recognizer()
+        with sr.Microphone() as source:
+            st.info("Listening... speak your mood (e.g., 'sad', 'happy')")
+            audio = r.listen(source, phrase_time_limit=4)
         try:
-            with sr.Microphone() as source:
-                st.info("Listening... speak your mood (e.g., 'sad', 'happy')")
-                audio = r.listen(source, phrase_time_limit=4)
             text = r.recognize_google(audio).lower()
             st.success(f"You said: {text}")
             if "sad" in text: mood = "😞 Sad"
@@ -46,13 +52,12 @@ if voice_available:
             elif "tired" in text: mood = "😴 Tired"
             elif "happy" in text: mood = "😊 Happy"
             else: mood = "😐 Neutral"
-        except Exception as e:
-            st.error("Sorry, I couldn’t process your voice input.")
+        except Exception:
+            st.error("Sorry, I couldn’t understand you.")
 else:
-    st.info("🎤 Voice input not available on this platform — please select your mood manually.")
+    st.info("🎤 Voice recording not available here (works on local only).")
 
-
-# --- Quotes for variety ---
+# --- Quotes ---
 quotes = [
     "You are enough. Just as you are. 💛",
     "Progress, not perfection.",
@@ -62,11 +67,14 @@ quotes = [
     "You’ve survived 100% of your bad days."
 ]
 
-# --- AI reply ---
+# --- AI Response ---
 if st.button("💬 Show Message"):
-    prompt = f"The user feels {mood}. Write one short gentle motivational sentence:"
-    ai_reply = generator(prompt, max_length=40, num_return_sequences=1)[0]["generated_text"]
-    st.success(ai_reply)
+    if generator:
+        prompt = f"The user feels {mood}. Write one short gentle motivational sentence:"
+        ai_reply = generator(prompt, max_length=40, num_return_sequences=1)[0]["generated_text"]
+        st.success(ai_reply)
+    else:
+        st.success(random.choice(quotes))
     st.info(random.choice(quotes))
 
 # --- Mood Tracker ---
@@ -87,42 +95,39 @@ if not df.empty:
     st.write("### 📊 Your Recent Mood History")
     st.dataframe(df.tail(7))
 
-# --- Edge AI Camera Emotion (NO Kaggle model needed) ---
-st.write("### 🎥 Detect Emotion from Camera (Smile Detector)")
+# --- Optional Local Camera (Skip on Cloud) ---
+if cv2_available and not st.secrets.get("on_cloud", False):
+    st.write("### 🎥 Detect Emotion from Camera (Smile Detector)")
+    if st.button("Open Camera"):
+        st.info("Press 'q' to close camera window.")
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_smile.xml")
 
-if st.button("Open Camera"):
-    st.info("Press 'q' in the camera window to close it.")
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    smile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_smile.xml")
+        cap = cv2.VideoCapture(0)
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-    cap = cv2.VideoCapture(0)
+            for (x, y, w, h) in faces:
+                roi_gray = gray[y:y+h, x:x+w]
+                smiles = smile_cascade.detectMultiScale(roi_gray, 1.8, 20)
+                label = "😊 Happy" if len(smiles) > 0 else "😐 Neutral"
+                color = (0, 255, 0) if len(smiles) > 0 else (255, 255, 0)
+                cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
+                cv2.putText(frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+            cv2.imshow("Mood Companion - Camera", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        cap.release()
+        cv2.destroyAllWindows()
+        st.success("Camera closed 💛")
+else:
+    st.info("📷 Camera detection available only on local setup.")
 
-        for (x, y, w, h) in faces:
-            roi_gray = gray[y:y + h, x:x + w]
-            roi_color = frame[y:y + h, x:x + w]
-            smiles = smile_cascade.detectMultiScale(roi_gray, 1.8, 20)
-            if len(smiles) > 0:
-                label = "😊 Happy"
-                color = (0, 255, 0)
-            else:
-                label = "😐 Neutral"
-                color = (255, 255, 0)
-
-            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(frame, label, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-
-        cv2.imshow("Mood Companion - Camera", frame)
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-    st.success("Camera closed. Hope that smile felt nice 💛")
+st.markdown("---")
+st.caption("Built with ❤️ using Streamlit | Mood Companion © 2025")

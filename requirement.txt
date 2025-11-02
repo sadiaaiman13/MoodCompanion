@@ -1,7 +1,5 @@
-streamlit==1.39.0
-transformers==4.46.2
-torch==2.5.1
-tensorflow==2.17.0
-tf-keras
+streamlit
+transformers
+torch
+pandas
 opencv-python
-gtts
