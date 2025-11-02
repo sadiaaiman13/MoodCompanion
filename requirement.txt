@@ -1,9 +1,7 @@
-streamlit
-transformers
-torch
-tensorflow
+streamlit==1.39.0
+transformers==4.46.2
+torch==2.5.1
+tensorflow==2.17.0
 tf-keras
 opencv-python
 gtts
-
-
