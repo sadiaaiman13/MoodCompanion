@@ -1,7 +1,5 @@
 streamlit
-torch
 transformers
+torch
+pandas
 opencv-python
-gtts
-tensorflow
-tf-keras
