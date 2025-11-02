@@ -1,0 +1,9 @@
+streamlit
+pandas
+speechrecognition
+pyaudio
+torch
+transformers
+opencv-python
+tensorflow
+tf-keras
