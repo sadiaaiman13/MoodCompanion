@@ -2,7 +2,12 @@ import streamlit as st
 import pandas as pd
 import random
 import datetime
-import speech_recognition as sr
+try:
+    import speech_recognition as sr
+    voice_available = True
+except ImportError:
+    voice_available = False
+
 from transformers import pipeline
 import cv2
 
@@ -24,30 +29,28 @@ mood = st.selectbox(
 )
 
 # --- Voice input ---
-if st.button("🎧 Record my voice"):
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.info("Listening... speak your mood (e.g., 'sad', 'happy')")
-        audio = r.listen(source, phrase_time_limit=4)
-    try:
-        text = r.recognize_google(audio).lower()
-        st.success(f"You said: {text}")
-        if "sad" in text:
-            mood = "😞 Sad"
-        elif "stress" in text:
-            mood = "😰 Stressed"
-        elif "angry" in text:
-            mood = "😡 Angry"
-        elif "tired" in text:
-            mood = "😴 Tired"
-        elif "happy" in text:
-            mood = "😊 Happy"
-        else:
-            mood = "😐 Neutral"
-        st.info(f"Detected mood: {mood}")
-    except Exception as e:
-        st.error("Sorry, I couldn’t understand you. Please try again.")
-        st.write(f"Error details: {e}")
+st.write("🎙️ You can type your mood — or use your voice if available")
+
+if voice_available:
+    if st.button("🎧 Record my voice"):
+        r = sr.Recognizer()
+        try:
+            with sr.Microphone() as source:
+                st.info("Listening... speak your mood (e.g., 'sad', 'happy')")
+                audio = r.listen(source, phrase_time_limit=4)
+            text = r.recognize_google(audio).lower()
+            st.success(f"You said: {text}")
+            if "sad" in text: mood = "😞 Sad"
+            elif "stress" in text: mood = "😰 Stressed"
+            elif "angry" in text: mood = "😡 Angry"
+            elif "tired" in text: mood = "😴 Tired"
+            elif "happy" in text: mood = "😊 Happy"
+            else: mood = "😐 Neutral"
+        except Exception as e:
+            st.error("Sorry, I couldn’t process your voice input.")
+else:
+    st.info("🎤 Voice input not available on this platform — please select your mood manually.")
+
 
 # --- Quotes for variety ---
 quotes = [
